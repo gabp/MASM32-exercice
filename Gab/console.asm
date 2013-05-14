@@ -9,23 +9,21 @@ comment * -----------------------------------------------------
 
     .data?
       value dd ?
-      nbrChars DWORD ?
       fileData WIN32_FIND_DATA <>
-      fileName BYTE 100 dup(?)
 
       hFile HANDLE ?
       ErrorCode DWORD ?
-      array BYTE 1 DUP (?)
-      CurrentDirectory LPTSTR ?
+      
+      CurrentDirectory db ?
       
     .data
       item dd 0
-      TempDirectory BYTE "\", 0
-      FindFirstFileError BYTE "FindFirstFile() failed with code %d", 0
       fileTypeAll BYTE "*", 0
       backslash BYTE "\", 0
-      tmp BYTE " ", 0
-      null BYTE 00h, 0
+      tmp BYTE 10000 dup(0)
+      array BYTE 10000 DUP (0)
+      counter dd 0
+      nbrElem dd 0
       
       
     .code
@@ -44,45 +42,69 @@ main proc
 
     cls
     invoke lstrcpy, addr array[0], addr backslash
-    invoke lstrcat, addr array[0], addr null
     invoke GetCurrentDirectory, 0, 00h
     invoke GetCurrentDirectory, eax, addr CurrentDirectory
     print addr CurrentDirectory, 13, 10
     print "-----------------------------", 13, 10
 
+    mov edx, 0
+    mov counter, edx   
+    mov ecx, 1
+    mov nbrElem, ecx
+
 FindDirectories:
+    ;pushad
+    ;fn MessageBox,0,str$(esi),"Test",MB_OK
+    ;popad
+    
+
     invoke lstrcpy, addr tmp, addr CurrentDirectory
-    invoke lstrcat, addr tmp, addr TempDirectory
+    ;print addr tmp, 13, 10
+    mov eax, counter
+    mov edx, 30
+    imul edx, eax
+    invoke lstrcat, addr tmp, addr array[edx]
     invoke lstrcat, addr tmp, addr fileTypeAll
 
+    ;print addr tmp, 13, 10
+
     invoke FindFirstFile, addr tmp, addr fileData    
-
     mov hFile, eax
-    mov ecx, 0
-    push ecx ;number of elem in array
-    mov edx, 0
+    ;print addr tmp, 13, 10
 
+    invoke  GetLastError
+    mov     ErrorCode, eax
+
+    
+    ;print str$(ErrorCode), 13, 10
+    
     .while ErrorCode != ERROR_NO_MORE_FILES
+    
         .if fileData.dwFileAttributes == FILE_ATTRIBUTE_DIRECTORY
+        ;print str$(ErrorCode), 13, 10  
             .if fileData.cFileName != 46
+                    mov edx, counter
+                    mov eax, 30
+                    imul eax, edx
 
-                    pop ecx
-                    push ecx
-                    invoke lstrcpy, addr tmp, addr array[edx]
+                    push eax
+                    ;print str$(eax), 13, 10
+                    pop eax
+ 
+                    invoke lstrcpy, addr tmp, addr array[eax]
                     ;print addr tmp, 13, 10
+                    
                     invoke lstrcat, addr tmp, addr fileData.cFileName
+                    invoke lstrcat, addr tmp, addr backslash
                     ;print addr tmp, 13, 10
-                    pop ecx
-                    push ecx
-                    invoke lstrcpy, addr array[ecx], addr tmp
+                    mov ecx, nbrElem
+                    mov eax, 30
+                    imul eax, ecx
+                    invoke lstrcpy, addr array[eax], addr tmp
 
-                    pop ecx
-                    push ecx
-                    print addr array[ecx], 13, 10
-
-                    pop ecx
+                    mov ecx, nbrElem
                     inc ecx
-                    push ecx
+                    mov nbrElem, ecx
             .endif
         .endif
         invoke FindNextFile, hFile, addr fileData
@@ -90,10 +112,39 @@ FindDirectories:
         invoke  GetLastError
         mov     ErrorCode, eax
     .endw
-print "-----------------------------", 13, 10
-    print addr array[0], 13, 10
-    print "-----------------------------", 13, 10
-    pop ecx
+
+    mov eax, hFile
+    invoke FindClose, hFile
+    invoke SetLastError, 0
+    
+    mov eax, counter
+    inc eax
+    mov counter, eax
+    mov ecx, nbrElem
+
+    .if eax < ecx
+        jmp FindDirectories
+    .endif
+
+GoThroughArray:
+    mov ecx, nbrElem
+    mov eax, 1
+    push eax
+    .while eax < ecx     
+        pop eax
+        push eax
+        mov edx, 30
+        imul edx, eax  
+
+        print addr array[edx], 13, 10
+
+        pop eax
+        inc eax
+        push eax
+        mov ecx, nbrElem
+    .endw
+
+    pop eax
     ret
 
 main endp
