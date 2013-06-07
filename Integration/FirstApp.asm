@@ -45,6 +45,10 @@ comment * -----------------------------------------------------
         APIReplace dd 512 dup(?)
         APISearch dd 512 dup(?)
         newSectionPosition DWORD ?
+        hint dd ?
+
+        ;;;;;;;
+        numberOfNames2 dd ?
         
     .data
         testString db "C:\Users\t-hoan\Documents\GitHub\MASM32-exercice\Integration\Sample1-FirstApp.exe",0
@@ -279,7 +283,7 @@ menu proc
         invoke  lstrcpy, addr APIReplace, addr clear
         invoke  lstrcpy, addr APIReplace, addr buffer
         pushad
-        call    ReplaceImportAPI
+        call    ReplaceImportExportAPI
         popad    
     .endif
     
@@ -349,7 +353,7 @@ ParseImportsExports endp
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
+LookForImportAPIName proc uses esi ecx ebx pNTHdr:DWORD
     
     mov edi, pNTHdr
     assume edi: ptr IMAGE_NT_HEADERS
@@ -416,10 +420,62 @@ LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
     .endw
  
     ret
-LookForAPIName endp
+LookForImportAPIName endp
 
-ReplaceImportAPI proc 
+LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
+    pushad
+    mov numberOfNames2, 0
+    mov edi, pNTHdr
+    assume edi: ptr IMAGE_NT_HEADERS
+    mov edi, [edi].OptionalHeader.DataDirectory[0].VirtualAddress
+    invoke RVAToOffset, pMapping, edi
+    mov edi, eax
+    add edi, pMapping
+    assume edi:ptr IMAGE_EXPORT_DIRECTORY
 
+    invoke RVAToOffset, pMapping, [edi].nName
+    mov edx, eax
+    add edx, pMapping
+    ;print edx, 13, 10 ;print name of module
+
+    push [edi].NumberOfNames
+    pop numberOfNames2
+
+    invoke RVAToOffset,pMapping,[edi].AddressOfNames 
+    mov esi,eax 
+    add esi, pMapping
+
+    .while numberOfNames2 > 0
+        invoke RVAToOffset,pMapping,dword ptr [esi] 
+        add eax, pMapping
+        
+        pushad
+          ;invoke wsprintf,addr temp,addr NameTemplate,eax
+          invoke lstrcmp, eax, addr APISearch
+
+          .if eax == 0
+            ; Found the string
+            print "Found the API Name", 13 ,10
+            ;print "ptrAPISearch: "
+            sub esi, pMapping
+            ;print str$(esi),13,10
+            mov ptrAPISearch, esi
+            popad 
+            popad
+            ret
+         .endif
+          
+        popad
+
+        dec numberOfNames2
+        add esi, 4
+    .endw
+    popad
+    ret
+LookForExportAPIName endp
+
+
+ReplaceImportExportAPI proc 
     invoke CreateFile,addr fileNameIE,GENERIC_READ or GENERIC_WRITE,NULL,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL ;ouverture du fichier
     .if eax != INVALID_HANDLE_VALUE
       mov hFile, eax
@@ -445,7 +501,23 @@ ReplaceImportAPI proc
                 push edi
                 
                 pushad
-                invoke    LookForAPIName, edi
+                print   "1 - Replace imported API",13,10
+                print   "2 - Replace exported API",13,10
+                print   "Choice (1,2): "
+                invoke  StdIn, addr buffer, sizeof buffer
+                invoke  lstrcmp, addr buffer, addr choice1
+                .if eax == 0
+                    mov     hint, 2
+                    invoke  LookForImportAPIName, edi
+                .endif
+                invoke  lstrcmp, addr buffer, addr choice2
+                .if eax == 0
+                    mov     hint, 0
+                    invoke  LookForExportAPIName, edi
+                .endif
+
+                invoke  lstrcpy, addr buffer, addr clear
+
                 popad
  
                 ; Get FileAlignment - used to add new section data later
@@ -501,7 +573,7 @@ ReplaceImportAPI proc
                 mov eax, pMapping
                 add eax,  ecx 
                 mov ebx, 0
-                add eax, 2 ; 4 bits 0 for Hint
+                add eax, hint ; 4 bits 0 for Hint (hint == 0 if writing an exported API)
                 mov ecx, offset APIReplace
                 mov edx, 0
                 mov ebx, [ecx]
@@ -522,7 +594,7 @@ ReplaceImportAPI proc
                 ; Change RVA to point to the new function (APIReplace)
                 mov eax, ptrAPISearch
                 .if eax == 0
-                    print "This function is not in import table", 13, 10
+                    print "This function is not in the import/export table", 13, 10
                     jmp NOTFOUND                    
                 .endif
                 
@@ -565,7 +637,7 @@ ReplaceImportAPI proc
 
     mov eax, 0
     ret
-ReplaceImportAPI endp
+ReplaceImportExportAPI endp
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
