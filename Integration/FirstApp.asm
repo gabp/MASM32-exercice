@@ -371,7 +371,7 @@ LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
  
       invoke RVAToOffset,pMapping,esi 
       pushad
-      print str$(esi), 13, 10
+      ;print str$(esi), 13, 10
       popad
       add eax,pMapping 
       mov esi,eax
@@ -402,10 +402,10 @@ LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
          .if eax == 0
             ; Find the string
             pushad
-            print "FIND THE API NAME:"
-            print addr temp
-            print " - "
-            print str$(ptrAPISearch), 13, 10
+            print "Found the API Name", 13 ,10
+            ;print addr temp
+            ;print " - "
+            ;print str$(ptrAPISearch), 13, 10
             popad 
          .else
             mov ptrAPISearch, 0
@@ -446,92 +446,78 @@ ReplaceImportAPI proc
                 
                 pushad
                 invoke    LookForAPIName, edi
-                
                 popad
+ 
+                ; Get FileAlignment - used to add new section data later
+                mov eax, [edi].OptionalHeader.FileAlignment
+                mov fileAlignment, eax
+ 
+                ; Get number of section
+                mov ax, [edi].FileHeader.NumberOfSections
+                movzx eax, ax
+ 
+                ; Move to the first section table
+                add edi, 4
+                assume edi: ptr IMAGE_FILE_HEADER
+                add edi, sizeof IMAGE_FILE_HEADER
+                assume edi: ptr IMAGE_OPTIONAL_HEADER32
+                add edi, sizeof IMAGE_OPTIONAL_HEADER32
+                assume edi: ptr IMAGE_SECTION_HEADER
+ 
+                ; Go to last section
+                dec eax
+                imul eax, sizeof IMAGE_SECTION_HEADER
+                add edi, eax
+                assume edi: ptr IMAGE_SECTION_HEADER
+ 
+                mov ptrLastSection, edi
+                mov eax, ptrLastSection
+                assume eax: ptr IMAGE_SECTION_HEADER
                 
-                
-
-                  ; Get FileAlignment - used to add new section data later
-                  mov eax, [edi].OptionalHeader.FileAlignment
-                  mov fileAlignment, eax
-
-                  ; Get number of section
-                  mov ax, [edi].FileHeader.NumberOfSections
-                  movzx eax, ax
-
-                  ; Move to the first section table
-                  add edi, 4
-                  assume edi: ptr IMAGE_FILE_HEADER
-                  add edi, sizeof IMAGE_FILE_HEADER
-                  assume edi: ptr IMAGE_OPTIONAL_HEADER32
-                  add edi, sizeof IMAGE_OPTIONAL_HEADER32
-                  assume edi: ptr IMAGE_SECTION_HEADER
-
-                  ; Go to last section
-                  dec eax
-                  imul eax, sizeof IMAGE_SECTION_HEADER
-                  add edi, eax
-                  assume edi: ptr IMAGE_SECTION_HEADER
-
-                  mov ptrLastSection, edi
-                  mov eax, ptrLastSection
-                  assume eax: ptr IMAGE_SECTION_HEADER
-                  
-                  ; Change virtual size of last section
-                  mov eax, [edi].Misc.VirtualSize
-                  add eax, fileAlignment
-                  mov [edi].Misc.VirtualSize, eax
-
-                  ; Change SizeOfRawData of last section
-                  mov eax, [edi].SizeOfRawData
-                  add eax, newSectionSize
-                  mov [edi].SizeOfRawData, eax
-
-                  ; Get lastSectionOffset
-                  mov eax, [edi].PointerToRawData
-                  mov lastSectionOffset, eax
-
-                  ; Get virtualAddress
-                  mov eax, [edi].VirtualAddress
-                  mov virtualAddress, eax
-
-                  ; Get the position of the new section
-                  mov ecx, fileSize
-                  sub ecx, newSectionSize  
-                  mov newSectionPosition, ecx
-                  pushad
-                  print "NEW SECTION POSITION - "
-                  print str$(newSectionPosition), 13, 10
-                  popad                 
-                  
-                  ; Write new API name into new section
-                  mov eax, pMapping
-                  add eax,  ecx 
-                  mov ebx, 0
-                  add eax, 2 ; 4 bits 0 for Hint
-                  mov ecx, offset APIReplace
-                  mov edx, 0
+                ; Change virtual size of last section
+                mov eax, [edi].Misc.VirtualSize
+                add eax, fileAlignment
+                mov [edi].Misc.VirtualSize, eax
+ 
+                ; Change SizeOfRawData of last section
+                mov eax, [edi].SizeOfRawData
+                add eax, newSectionSize
+                mov [edi].SizeOfRawData, eax
+ 
+                ; Get lastSectionOffset
+                mov eax, [edi].PointerToRawData
+                mov lastSectionOffset, eax
+ 
+                ; Get virtualAddress
+                mov eax, [edi].VirtualAddress
+                mov virtualAddress, eax
+ 
+                ; Get the position of the new section
+                mov ecx, fileSize
+                sub ecx, newSectionSize  
+                mov newSectionPosition, ecx
+                                  
+                ; Write new API name into new section
+                mov eax, pMapping
+                add eax,  ecx 
+                mov ebx, 0
+                add eax, 2 ; 4 bits 0 for Hint
+                mov ecx, offset APIReplace
+                mov edx, 0
+                mov ebx, [ecx]
+                .while  !(ebx == 0h)
                   mov ebx, [ecx]
-                  .while  !(ebx == 0h)
-                    mov ebx, [ecx]
-                    mov dword ptr ds:[eax], ebx
-                    add edx, 4
-                    add eax, 4
-                    add ecx, 4
-                  .endw
-
+                  mov dword ptr ds:[eax], ebx
+                  add edx, 4
+                  add eax, 4
+                  add ecx, 4
+                .endw
+ 
                 ; Convert Offset to RVA
                 mov eax, newSectionPosition
                 sub eax, lastSectionOffset
                 add eax, virtualAddress
                 mov newSectionPosition, eax
-                pushad
-                print "NewSectionPosition after converted" , 13, 10
-                print str$(newSectionPosition), 13, 10
-                popad
-                pushad
-                print str$(ptrAPISearch), 13, 10
-                popad
 
                 ; Change RVA to point to the new function (APIReplace)
                 mov eax, ptrAPISearch
@@ -546,23 +532,24 @@ ReplaceImportAPI proc
                 mov ecx, newSectionPosition
                 mov dword ptr ds:[eax], ecx  
                 popad
+
         NOTFOUND:
                 ; Unmap view
                 invoke UnmapViewOfFile, pMapping
                 pushad
-                print LastError$(),13,10
+                ;print LastError$(),13,10
                 popad
 
                 ; Close file
                 invoke CloseHandle, hFile
                 pushad
-                print LastError$(),13,10
+                ;print LastError$(),13,10
                 popad
                 
                 invoke CloseHandle, hMapping
                 
                 pushad
-                print LastError$(),13,10
+                ;print LastError$(),13,10
                 popad
                 pop edi
                 ret
