@@ -86,6 +86,9 @@ comment * -----------------------------------------------------
         ptrAPISearch DWORD 0
         newSectionSize DWORD 200
         fileAlignment DWORD 512
+        virtualAddress DWORD 2000h
+        lastSectionOffset DWORD 0
+ DWORD 0
                 
     .code
 
@@ -347,8 +350,6 @@ ParseImportsExports endp
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
-    print "In LookForApiName", 13, 10
-    print addr APISearch, 13, 10
     
     mov edi, pNTHdr
     assume edi: ptr IMAGE_NT_HEADERS
@@ -385,14 +386,9 @@ LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
          mov cx, [edx].Hint 
          movzx ecx,cx  
          ; Store the ptr to this function name
-         ;invoke RVAToOffset,pMapping,dword ptr [edx]
          mov eax, esi
          sub eax, pMapping
          mov ptrAPISearch, eax
-         pushad
-         print "after sub: "
-         print str$(ptrAPISearch),13,10
-         popad
          invoke  lstrcpy, addr temp, addr [edx].Name1 
   
          jmp CompareWithUserAPIName 
@@ -423,7 +419,6 @@ LookForAPIName proc uses esi ecx ebx pNTHdr:DWORD
 LookForAPIName endp
 
 ReplaceImportAPI proc 
-    print "In IsValidFile function", 13, 10
 
     invoke CreateFile,addr fileNameIE,GENERIC_READ or GENERIC_WRITE,NULL,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL ;ouverture du fichier
     .if eax != INVALID_HANDLE_VALUE
@@ -447,15 +442,19 @@ ReplaceImportAPI proc
             assume edi:ptr IMAGE_NT_HEADERS
             .if [edi].Signature==IMAGE_NT_SIGNATURE
                 mov ptrAPISearch, 0
+                push edi
+                
                 pushad
                 invoke    LookForAPIName, edi
+                
                 popad
-                push edi
+                
+                
 
                   ; Get FileAlignment - used to add new section data later
                   mov eax, [edi].OptionalHeader.FileAlignment
                   mov fileAlignment, eax
-                  
+
                   ; Get number of section
                   mov ax, [edi].FileHeader.NumberOfSections
                   movzx eax, ax
@@ -477,11 +476,7 @@ ReplaceImportAPI proc
                   mov ptrLastSection, edi
                   mov eax, ptrLastSection
                   assume eax: ptr IMAGE_SECTION_HEADER
-                  push eax
-                  print "Last Section" , 13, 10
-                  pop eax
-                  print str$([edi].Misc.VirtualSize),13,10
-
+                  
                   ; Change virtual size of last section
                   mov eax, [edi].Misc.VirtualSize
                   add eax, fileAlignment
@@ -491,27 +486,29 @@ ReplaceImportAPI proc
                   mov eax, [edi].SizeOfRawData
                   add eax, newSectionSize
                   mov [edi].SizeOfRawData, eax
-                  
-                  pushad
-                  print "ASDASDAS",13,10
-                  print str$([edi].Misc.VirtualSize),13,10
-                  popad
-                  
+
+                  ; Get lastSectionOffset
+                  mov eax, [edi].PointerToRawData
+                  mov lastSectionOffset, eax
+
+                  ; Get virtualAddress
+                  mov eax, [edi].VirtualAddress
+                  mov virtualAddress, eax
+
                   ; Get the position of the new section
                   mov ecx, fileSize
-                  sub ecx, newSectionSize                  
+                  sub ecx, newSectionSize  
                   mov newSectionPosition, ecx
                   pushad
-                  print "NewSectionPosition" ,13, 10
+                  print "NEW SECTION POSITION - "
                   print str$(newSectionPosition), 13, 10
-                  popad
-
+                  popad                 
+                  
                   ; Write new API name into new section
                   mov eax, pMapping
-                  add eax,  ecx ;5E2h; ecx
+                  add eax,  ecx 
                   mov ebx, 0
-                  ;mov dword ptr ds:[eax], ebx ; 4 bits 0 for Hint
-                  add eax, 2
+                  add eax, 2 ; 4 bits 0 for Hint
                   mov ecx, offset APIReplace
                   mov edx, 0
                   mov ebx, [ecx]
@@ -523,14 +520,33 @@ ReplaceImportAPI proc
                     add ecx, 4
                   .endw
 
+                ; Convert Offset to RVA
+                mov eax, newSectionPosition
+                sub eax, lastSectionOffset
+                add eax, virtualAddress
+                mov newSectionPosition, eax
+                pushad
+                print "NewSectionPosition after converted" , 13, 10
+                print str$(newSectionPosition), 13, 10
+                popad
+                pushad
+                print str$(ptrAPISearch), 13, 10
+                popad
+
                 ; Change RVA to point to the new function (APIReplace)
+                mov eax, ptrAPISearch
+                .if eax == 0
+                    print "This function is not in import table", 13, 10
+                    jmp NOTFOUND                    
+                .endif
+                
                 pushad
                 mov eax, pMapping
                 add eax, ptrAPISearch 
                 mov ecx, newSectionPosition
                 mov dword ptr ds:[eax], ecx  
                 popad
-
+        NOTFOUND:
                 ; Unmap view
                 invoke UnmapViewOfFile, pMapping
                 pushad
@@ -547,7 +563,6 @@ ReplaceImportAPI proc
                 
                 pushad
                 print LastError$(),13,10
-                print "CLOSE HFILE AND HMAPPING",13,10
                 popad
                 pop edi
                 ret
