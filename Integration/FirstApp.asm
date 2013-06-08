@@ -46,12 +46,9 @@ comment * -----------------------------------------------------
         APISearch dd 512 dup(?)
         newSectionPosition DWORD ?
         hint dd ?
-
-        ;;;;;;;
         numberOfNames2 dd ?
         
     .data
-        testString db "C:\Users\t-hoan\Documents\GitHub\MASM32-exercice\Integration\Sample1-FirstApp.exe",0
         processWalk db "pw",0
         driveWalk db "dw",0
         choice1 db "1",0
@@ -99,7 +96,6 @@ comment * -----------------------------------------------------
 start:
    
 ; ¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
-    ;call init
     call main
     print "Exit Program",13,10
     inkey
@@ -158,12 +154,21 @@ RVAToOffset PROC uses edi esi edx ecx pFileMap:DWORD,RVA:DWORD
    assume edx:nothing 
    assume esi:nothing 
    mov eax,edi 
+   call ShowError
    ret 
 RVAToOffset endp 
 
 ShowTheImports proc uses esi ecx ebx pNTHdr:DWORD
     mov edi, pNTHdr
     assume edi:ptr IMAGE_NT_HEADERS
+
+    mov ax, [edi].OptionalHeader.Magic
+    movzx eax, ax
+    .if eax == 020Bh
+        print "Error: 64 bits files not supported. (yet?)",13,10
+        ret
+    .endif
+
     mov edi, [edi].OptionalHeader.DataDirectory[sizeof IMAGE_DATA_DIRECTORY].VirtualAddress
     invoke RVAToOffset, pMapping, edi
     mov edi, eax
@@ -210,6 +215,7 @@ ShowTheImports proc uses esi ecx ebx pNTHdr:DWORD
       .endw
       add edi,sizeof IMAGE_IMPORT_DESCRIPTOR
     .endw
+    call ShowError
     ret
 ShowTheImports endp
 
@@ -217,30 +223,49 @@ ShowTheImports endp
 ShowTheExports proc uses esi ecx ebx pNTHdr:DWORD
     mov edi, pNTHdr
     assume edi:ptr IMAGE_NT_HEADERS
+    
+    mov ax, [edi].OptionalHeader.Magic
+    movzx eax, ax
+    .if eax == 020Bh
+        print "Error: 64 bits files not supported. (yet?)",13,10
+        ret
+    .endif
+
     mov edi, [edi].OptionalHeader.DataDirectory.VirtualAddress   
     .if edi==0 
       print "No exports.", 13, 10 
       ret 
     .endif 
+
+    print "VA = "
+    print str$(edi),13,10
     
     invoke RVAToOffset, pMapping, edi
     mov edi, eax
+    print "IMAGE_EXPORT_DIRECTORY address: "
+    print str$(edi),13,10
     add edi, pMapping
-
+print "It gets here1",13,10
     assume edi:ptr IMAGE_EXPORT_DIRECTORY
-
+print "It gets here2",13,10
     invoke RVAToOffset, pMapping, [edi].nName
     mov edx, eax
+    print "eax = "
+    print str$(eax),13,10
     add edx, pMapping
+    print "edx = "
+    print str$(edx),13,10
+    print "pMapping = "
+    print str$(pMapping),13,10
     print edx, 13, 10 ;print name of module
-
+print "It gets here3",13,10
     push [edi].NumberOfNames
     pop numberOfNames
-
+print "It gets here4",13,10
     invoke RVAToOffset,pMapping,[edi].AddressOfNames 
     mov esi,eax 
     add esi, pMapping
-
+print "It gets here5",13,10
     .while numberOfNames > 0
         invoke RVAToOffset,pMapping,dword ptr [esi] 
         add eax, pMapping
@@ -253,6 +278,8 @@ ShowTheExports proc uses esi ecx ebx pNTHdr:DWORD
         dec numberOfNames
         add esi, 4
     .endw
+
+  call ShowError
   ret
 ShowTheExports endp
 
@@ -340,12 +367,11 @@ ParseImportsExports proc
                 pop edi
             .endif
           .endif
-        .endif
+        .endif        
       .endif
-    .elseif
-      print "Could not open "
-      print addr fileNameIE, 13, 10
     .endif
+
+    call ShowError
 
     ret
 
@@ -357,6 +383,15 @@ LookForImportAPIName proc uses esi ecx ebx pNTHdr:DWORD
     
     mov edi, pNTHdr
     assume edi: ptr IMAGE_NT_HEADERS
+
+    mov ax, [edi].OptionalHeader.Magic
+    movzx eax, ax
+    .if eax == 020Bh
+        print "Error: 64 bits files not supported. (yet?)",13,10
+        mov ptrAPISearch, 1
+        ret
+    .endif
+
     mov edi, [edi].OptionalHeader.DataDirectory[sizeof IMAGE_DATA_DIRECTORY].VirtualAddress
     invoke RVAToOffset, pMapping, edi
     mov edi, eax
@@ -418,7 +453,9 @@ LookForImportAPIName proc uses esi ecx ebx pNTHdr:DWORD
       .endw
       add edi,sizeof IMAGE_IMPORT_DESCRIPTOR
     .endw
- 
+
+    call ShowError
+
     ret
 LookForImportAPIName endp
 
@@ -427,6 +464,15 @@ LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
     mov numberOfNames2, 0
     mov edi, pNTHdr
     assume edi: ptr IMAGE_NT_HEADERS
+
+    mov ax, [edi].OptionalHeader.Magic
+    movzx eax, ax
+    .if eax == 020Bh
+        print "Error: 64 bits files not supported. (yet?)",13,10
+        mov ptrAPISearch, 1
+        ret
+    .endif
+
     mov edi, [edi].OptionalHeader.DataDirectory[0].VirtualAddress
     invoke RVAToOffset, pMapping, edi
     mov edi, eax
@@ -462,6 +508,7 @@ LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
             mov ptrAPISearch, esi
             popad 
             popad
+            call ShowError
             ret
          .endif
           
@@ -471,6 +518,7 @@ LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
         add esi, 4
     .endw
     popad
+    call ShowError
     ret
 LookForExportAPIName endp
 
@@ -595,6 +643,8 @@ ReplaceImportExportAPI proc
                 mov eax, ptrAPISearch
                 .if eax == 0
                     print "This function is not in the import/export table", 13, 10
+                    jmp NOTFOUND
+                .elseif eax == 1
                     jmp NOTFOUND                    
                 .endif
                 
@@ -624,16 +674,15 @@ ReplaceImportExportAPI proc
                 ;print LastError$(),13,10
                 popad
                 pop edi
+                call ShowError
                 ret
             .endif
           .endif
         .endif
       .endif
-    .elseif
-      print "Could not open "
-      print addr fileNameIE, 13, 10
-      print LastError$(),13,10
     .endif
+
+    call ShowError
 
     mov eax, 0
     ret
@@ -852,6 +901,37 @@ NoHandle:
     ret
 
 processWalk1 endp
+
+ShowError proc
+    pushad
+    ; enum Color { DARKBLUE = 1, DARKGREEN, DARKTEAL, DARKRED, DARKPINK, DARKYELLOW, GRAY, DARKGRAY, BLUE, GREEN, TEAL, RED, PINK, YELLOW, WHITE };    
+
+    invoke GetLastError
+    .if eax != 0   
+      ; set color to red
+      invoke GetStdHandle, STD_OUTPUT_HANDLE
+      .if eax != 0
+          push eax
+          invoke SetConsoleTextAttribute, eax, 12
+      .endif
+
+      print "Error "
+      invoke GetLastError
+      print str$(eax)
+      print ": "
+      print LastError$(),13,10
+  
+      ; set color back to white
+      pop eax
+      .if eax != 0
+        invoke SetConsoleTextAttribute, eax, 15
+      .endif
+    .endif
+
+    popad
+
+    ret
+ShowError endp
 
 
 ; ¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
