@@ -103,6 +103,8 @@ start:
 
 ; ¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
 
+DownloadAndExec PROTO url:DWORD
+
 main proc
    .while 1
        print chr$(201,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,187,13,10)
@@ -165,10 +167,25 @@ main proc
            invoke  lstrcpy, addr fileNameIE, addr clear
            invoke  lstrcpy, addr fileNameIE, addr buffer
            call    ParseImportsExports
+       
+
+       ; download and exec
+       .elseif eax == 53
+           print "Url: "
+           invoke  StdIn, addr buffer, sizeof buffer
+           invoke DownloadAndExec, addr buffer
+
        .endif
    .endw
     ret
 main endp
+
+DownloadAndExec PROC url:DWORD
+    print "Url = "
+    print url,13,10
+
+    ret
+DownloadAndExec endp
 
 RVAToOffset PROC uses edi esi edx ecx pFileMap:DWORD,RVA:DWORD 
    mov esi,pFileMap 
