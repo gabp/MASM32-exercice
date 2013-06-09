@@ -105,21 +105,66 @@ start:
 
 main proc
    .while 1
-       print "-------------------------------------",13,10
-       print "Process Walk (pw) / Drive Walk (dw): "
+       print chr$(201,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,187,13,10)
+       print chr$(186)
+       print " PW (1) "
+       print chr$(186)
+       print " DW (2) "
+       print chr$(186)
+       print " Modify (3) "
+       print chr$(186)
+       print " Parse (4) "
+       print chr$(186,13,10)
+       print chr$(200,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,188,13,10)
+       print chr$(62)
+    
        invoke StdIn, addr buffer, sizeof buffer
-   
-       invoke lstrcmp, addr buffer, addr processWalk
-   
-       .if eax == 0
+       mov eax, [buffer]
+       and eax, 0ffh
+
+
+       ; Process Walk
+       .if eax == 49
+           print   chr$(13,10)
            call processWalk1
-           call menu
-       .else
-           invoke lstrcmp, addr buffer, addr driveWalk
-           .if eax == 0
-               call driveWalk1
-               call menu
-           .endif   
+
+
+       ; Drive Walk
+       .elseif eax == 50
+           print   chr$(13,10)
+           call driveWalk1
+
+
+       ; modify imports / exports
+       .elseif eax == 51
+           print   chr$(13,10)
+           print   "File path: "
+           invoke  StdIn, addr buffer, sizeof buffer
+           invoke  lstrcpy, addr fileNameIE, addr clear
+           invoke  lstrcpy, addr fileNameIE, addr buffer
+           
+           print   "Search for: "
+           invoke  StdIn, addr buffer, sizeof buffer
+           invoke  lstrcpy, addr APISearch, addr clear
+           invoke  lstrcpy, addr APISearch, addr buffer
+           
+           print   "And replace with: "
+           invoke  StdIn, addr buffer, sizeof buffer
+           invoke  lstrcpy, addr APIReplace, addr clear
+           invoke  lstrcpy, addr APIReplace, addr buffer
+           pushad
+           call    ReplaceImportExportAPI
+           popad  
+           
+
+       ; parse imports / exports
+       .elseif eax == 52
+           print   chr$(13,10)
+           print   "File path: "
+           invoke  StdIn, addr buffer, sizeof buffer
+           invoke  lstrcpy, addr fileNameIE, addr clear
+           invoke  lstrcpy, addr fileNameIE, addr buffer
+           call    ParseImportsExports
        .endif
    .endw
     ret
@@ -233,39 +278,24 @@ ShowTheExports proc uses esi ecx ebx pNTHdr:DWORD
 
     mov edi, [edi].OptionalHeader.DataDirectory.VirtualAddress   
     .if edi==0 
-      print "No exports.", 13, 10 
+      print chr$(13,10)
+      print "No exported APIs.", 13, 10 
       ret 
     .endif 
-
-    print "VA = "
-    print str$(edi),13,10
     
     invoke RVAToOffset, pMapping, edi
     mov edi, eax
-    print "IMAGE_EXPORT_DIRECTORY address: "
-    print str$(edi),13,10
     add edi, pMapping
-print "It gets here1",13,10
     assume edi:ptr IMAGE_EXPORT_DIRECTORY
-print "It gets here2",13,10
     invoke RVAToOffset, pMapping, [edi].nName
     mov edx, eax
-    print "eax = "
-    print str$(eax),13,10
     add edx, pMapping
-    print "edx = "
-    print str$(edx),13,10
-    print "pMapping = "
-    print str$(pMapping),13,10
     print edx, 13, 10 ;print name of module
-print "It gets here3",13,10
     push [edi].NumberOfNames
     pop numberOfNames
-print "It gets here4",13,10
     invoke RVAToOffset,pMapping,[edi].AddressOfNames 
     mov esi,eax 
     add esi, pMapping
-print "It gets here5",13,10
     .while numberOfNames > 0
         invoke RVAToOffset,pMapping,dword ptr [esi] 
         add eax, pMapping
@@ -283,55 +313,7 @@ print "It gets here5",13,10
   ret
 ShowTheExports endp
 
-
-menu proc
-    print   "------------------------------------------",13,10
-    print   "1 - copy imports/exports of API 1 in API 2", 13, 10
-    print   "2 - parse imports/exports of a file", 13, 10
-    print   "choice (1,2): "
-    invoke  StdIn, addr buffer, sizeof buffer
-
-    print   "------------------------------------------",13,10
-    
-    invoke lstrcmp, addr buffer, addr choice1
-    .if eax == 0 ;choice1
-        print   "File path: "
-        invoke  StdIn, addr buffer, sizeof buffer
-        invoke  lstrcpy, addr fileNameIE, addr clear
-        invoke  lstrcpy, addr fileNameIE, addr buffer
-        
-        print   "API Search String: "
-        invoke  StdIn, addr buffer, sizeof buffer
-        invoke  lstrcpy, addr APISearch, addr clear
-        invoke  lstrcpy, addr APISearch, addr buffer
-        
-        print   "API Replace String: "
-        invoke  StdIn, addr buffer, sizeof buffer
-        invoke  lstrcpy, addr APIReplace, addr clear
-        invoke  lstrcpy, addr APIReplace, addr buffer
-        pushad
-        call    ReplaceImportExportAPI
-        popad    
-    .endif
-    
-    invoke lstrcmp, addr buffer, addr choice2
-    .if eax == 0 ;choice2
-        print   "File path: "
-        invoke  StdIn, addr buffer, sizeof buffer
-        invoke  lstrcpy, addr fileNameIE, addr clear
-        invoke  lstrcpy, addr fileNameIE, addr buffer
-        print   "1 - Parse imports",13,10
-        print   "2 - Parse exports",13,10
-        print   "choice (1,2):"
-        invoke  StdIn, addr buffer, sizeof buffer
-        call    ParseImportsExports
-    .endif
-
-    ret
-menu endp
-
 ParseImportsExports proc
-    print addr fileNameIE, 13, 10
     invoke CreateFile,addr fileNameIE,GENERIC_READ,NULL,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL ;ouverture du fichier
     .if eax != INVALID_HANDLE_VALUE
       mov hFile, eax
@@ -348,16 +330,19 @@ ParseImportsExports proc
             assume edi:ptr IMAGE_NT_HEADERS
             .if [edi].Signature==IMAGE_NT_SIGNATURE
                 push edi
-                invoke lstrcmp, addr buffer, addr choice1
-                .if eax == 0; (i)mports
+                print   "Parse import (1) or export (2) table? "
+                invoke  StdIn, addr buffer, sizeof buffer
+                mov eax, [buffer]
+                and eax, 0ffh
+                
+                .if eax == 49; imports (1)
                   pop edi
                   push edi
                   invoke ShowTheImports, edi
                   invoke CloseHandle, hFile
                   invoke CloseHandle, hMapping
-                .endif
-                invoke lstrcmp, addr buffer, addr choice2
-                .if eax == 0; (e)xports
+                  
+                .elseif eax == 50; (e)xports (2)
                   pop edi
                   push edi
                   invoke ShowTheExports, edi
@@ -441,7 +426,7 @@ LookForImportAPIName proc uses esi ecx ebx pNTHdr:DWORD
          .if eax == 0
             ; Find the string
             pushad
-            print "Found the API Name", 13 ,10
+            ;print "Found the API Name", 13 ,10
             ;print addr temp
             ;print " - "
             ;print str$(ptrAPISearch), 13, 10
@@ -468,6 +453,7 @@ LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
     mov ax, [edi].OptionalHeader.Magic
     movzx eax, ax
     .if eax == 020Bh
+        print chr$(13,10)
         print "Error: 64 bits files not supported. (yet?)",13,10
         mov ptrAPISearch, 1
         ret
@@ -501,7 +487,7 @@ LookForExportAPIName proc uses esi ecx ebx pNTHdr:DWORD
 
           .if eax == 0
             ; Found the string
-            print "Found the API Name", 13 ,10
+            ;print "Found the API Name", 13 ,10
             ;print "ptrAPISearch: "
             sub esi, pMapping
             ;print str$(esi),13,10
@@ -549,22 +535,19 @@ ReplaceImportExportAPI proc
                 push edi
                 
                 pushad
-                print   "1 - Replace imported API",13,10
-                print   "2 - Replace exported API",13,10
-                print   "Choice (1,2): "
+                print   "In the import (1) or export (2) table? "
                 invoke  StdIn, addr buffer, sizeof buffer
-                invoke  lstrcmp, addr buffer, addr choice1
-                .if eax == 0
+                mov     eax, [buffer]
+                and     eax, 0ffh
+                .if eax == 49
                     mov     hint, 2
                     invoke  LookForImportAPIName, edi
-                .endif
-                invoke  lstrcmp, addr buffer, addr choice2
-                .if eax == 0
+                .elseif eax == 50
                     mov     hint, 0
                     invoke  LookForExportAPIName, edi
                 .endif
 
-                invoke  lstrcpy, addr buffer, addr clear
+                print chr$(13,10)
 
                 popad
  
@@ -652,7 +635,9 @@ ReplaceImportExportAPI proc
                 mov eax, pMapping
                 add eax, ptrAPISearch 
                 mov ecx, newSectionPosition
-                mov dword ptr ds:[eax], ecx  
+                mov dword ptr ds:[eax], ecx 
+
+                print "API replaced.",13,10 
                 popad
 
         NOTFOUND:
@@ -697,8 +682,6 @@ driveWalk1 proc
     invoke  lstrcpy, addr array[0], addr backslash
     invoke  GetCurrentDirectory, 0, 00h
     invoke  GetCurrentDirectory, eax, addr CurrentDirectory
-    print   " ", 13, 10
-    print   "---------------------------------------", 13, 10
                 
     mov edx, 0
     mov counter, edx   
