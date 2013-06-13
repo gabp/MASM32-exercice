@@ -2,6 +2,8 @@
     include \masm32\include\masm32rt.inc
     include \masm32\include\psapi.inc
     includelib \masm32\lib\psapi.lib
+    include \masm32\include\urlmon.inc
+    includelib \masm32\lib\urlmon.lib
 ; ¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
 
 comment * -----------------------------------------------------
@@ -47,6 +49,9 @@ comment * -----------------------------------------------------
         newSectionPosition DWORD ?
         hint dd ?
         numberOfNames2 dd ?
+
+        downloadURL db 1000 dup(?)
+        downloadedFileName db 1000 dup(?)
         
     .data
         processWalk db "pw",0
@@ -89,6 +94,7 @@ comment * -----------------------------------------------------
         fileAlignment DWORD 512
         virtualAddress DWORD 2000h
         lastSectionOffset DWORD 0
+
  DWORD 0
                 
     .code
@@ -103,11 +109,10 @@ start:
 
 ; ¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
 
-DownloadAndExec PROTO url:DWORD
-
 main proc
    .while 1
-       print chr$(201,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,187,13,10)
+       print chr$(201,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,205,203,205,205,205,205,205,205,205,205,205,205,205,187)
+       print chr$(32,201,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,187,13,10)
        print chr$(186)
        print " PW (1) "
        print chr$(186)
@@ -116,8 +121,12 @@ main proc
        print " Modify (3) "
        print chr$(186)
        print " Parse (4) "
+       print chr$(186,32,186)
+       print " Download & Exec (5) "
        print chr$(186,13,10)
-       print chr$(200,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,188,13,10)
+       print chr$(200,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,205,202,205,205,205,205,205,205,205,205,205,205,205,188)
+       print chr$(32,200,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,205,188,13,10)
+
        print chr$(62)
     
        invoke StdIn, addr buffer, sizeof buffer
@@ -170,19 +179,37 @@ main proc
        
 
        ; download and exec
-       .elseif eax == 53
-           print "Url: "
-           invoke  StdIn, addr buffer, sizeof buffer
-           invoke DownloadAndExec, addr buffer
-
+       .elseif eax == 53       
+           call DownloadAndExec
        .endif
    .endw
     ret
 main endp
 
-DownloadAndExec PROC url:DWORD
-    print "Url = "
-    print url,13,10
+DownloadAndExec PROC
+    print "Url: "
+    invoke  StdIn, addr buffer, sizeof buffer
+    invoke lstrcpy, addr downloadURL, addr buffer
+
+    print "File name: "
+    invoke  StdIn, addr buffer, sizeof buffer
+    invoke lstrcpy, addr downloadedFileName, addr buffer
+    invoke URLDownloadToFileA, NULL, addr downloadURL, addr downloadedFileName, 0, NULL
+
+    .if eax == 0
+        print "File downloaded.",13,10
+    .elseif eax != 0
+        print "Problem downloading the file.",13,10
+        jmp TheEnd
+    .endif
+
+    invoke ShellExecute, 0, 0, addr downloadedFileName, 0, 0, 5
+    .if eax <= 32
+        print "Error executing file.",13,10
+    .endif
+
+ TheEnd:
+    call ShowError
 
     ret
 DownloadAndExec endp
